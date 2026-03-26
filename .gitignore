@@ -1,0 +1,15 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Entornos virtuales
+.venv/
+env/
+venv/
+ENV/
+
+# Archivos de configuración de VS Code
+.vscode/
+
+# Archivos de base de datos
+taller_camarina.db
