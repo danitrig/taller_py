@@ -19,7 +19,7 @@ class MenuPrincipal:
         # Frame contenedor principal
         main_frame = tk.Frame(self.root, bg='#1e3a8a')
         main_frame.pack(expand=True)
-        
+        print("Hola desde la rama")
         # Logo/Título
         titulo = tk.Label(main_frame,
                          text="🚛 TALLERES CAMARINA",
