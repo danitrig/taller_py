@@ -1,8 +1,10 @@
 import sqlite3
+from database import DatabaseManager
 
 def inicializar_base_datos():
-    # Conectar a la base de datos
-    conexion = sqlite3.connect('taller_camarina.db')
+    # Conectar a la base de datos usando el manager principal
+    db = DatabaseManager()
+    conexion = db.get_connection()
     cursor = conexion.cursor()
     try:
         cursor.execute("PRAGMA foreign_keys = ON")  
@@ -59,6 +61,13 @@ def inicializar_base_datos():
                 FOREIGN KEY (detalle_id) REFERENCES detalles(id),
                 FOREIGN KEY (mecanico_id) REFERENCES mecanicos(id),
                 FOREIGN KEY (estado_trabajador_id) REFERENCES estados_trabajador(id)
+            );
+
+            -- TABLA 7: CLIENTES
+            CREATE TABLE IF NOT EXISTS clientes (
+                id_cliente INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre_cliente TEXT,
+                descripcion TEXT
             );
         ''')
         print("✅ Tablas creadas correctamente")

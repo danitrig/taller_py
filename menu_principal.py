@@ -1,4 +1,5 @@
 import tkinter as tk
+from database import DatabaseManager
 
 class MenuPrincipal:
     def __init__(self, root):
@@ -59,6 +60,11 @@ class MenuPrincipal:
                 "comando": self.abrir_gestion_estados
             },
             {
+                "texto": "👥 GESTIÓN DE CLIENTES",
+                "color": "#3F51B5",
+                "comando": self.abrir_gestion_clientes
+            },
+            {
                 "texto": "❌ SALIR",
                 "color": "#f44336",
                 "comando": self.salir
@@ -88,6 +94,7 @@ class MenuPrincipal:
             "#2196F3": "#0b7dda",
             "#FF9800": "#e68900",
             "#9C27B0": "#7b1fa2",
+            "#3F51B5": "#303F9F",
             "#f44336": "#da190b"
         }
         return colores_hover.get(color, color)
@@ -128,12 +135,30 @@ class MenuPrincipal:
         ventana_gestion.state('zoomed')
         from gestion_estados import GestionEstados
         GestionEstados(ventana_gestion, self.root)
+        
+    def abrir_gestion_clientes(self):
+        """Abre gestión de clientes"""
+        self.root.withdraw()
+        
+        ventana_gestion = tk.Toplevel()
+        ventana_gestion.state('zoomed')
+        from gestion_clientes import GestionClientes
+        GestionClientes(ventana_gestion, self.root)
     
     def salir(self):
         """Cierra la aplicación"""
         self.root.quit()
 
 if __name__ == "__main__":
+    # Aquí inicializas la conexión a PostgreSQL. (Si omites los datos usa la de SQLite local)
+    db = DatabaseManager(
+        tipo_bd='postgres', 
+        host='localhost', 
+        port=5432, 
+        dbname='taller_camarina', 
+        user='postgres', 
+        password='AlfinfBD24'
+    )
     root = tk.Tk()
     app = MenuPrincipal(root)
     root.mainloop()

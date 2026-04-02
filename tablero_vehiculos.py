@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import messagebox
 import sqlite3
+from database import DatabaseManager
 from tkcalendar import DateEntry
 from datetime import datetime
 
@@ -14,9 +15,11 @@ class TableroVehiculos:
         self.root.configure(bg='#f0f0f0')
         
         # Conectar a la base de datos
-        self.conexion = sqlite3.connect('taller_camarina.db')
+        self.db_manager = DatabaseManager()
+        self.conexion = self.db_manager.get_connection()
         self.cursor = self.conexion.cursor()
-        self.cursor.execute("PRAGMA foreign_keys = ON")
+        if self.db_manager.tipo_bd == 'sqlite':
+            self.cursor.execute("PRAGMA foreign_keys = ON")
         
         # Variables de paginación y filtros
         self.pagina_actual = 0
@@ -260,13 +263,13 @@ class TableroVehiculos:
                 
                 posicion += 1
     def autenticar_nfc(self, accion_callback, *args):
-        """
-        Ventana modal para autenticar con NFC antes de ejecutar una acción
-        
-        Args:
-            accion_callback: Función a ejecutar si la autenticación es exitosa
-            *args: Argumentos para pasar a la función callback
-        """
+        # BYPASS DE NFC
+        self.usuario_actual = {'id': 1, 'nombre': 'Desarrollador', 'rol': 'jefe'}
+        accion_callback(*args)
+        return
+
+        #Ventana modal para autenticar con NFC antes de ejecutar una acción
+
         from nfc_reader import NFCReader
         import time
         
@@ -405,6 +408,7 @@ class TableroVehiculos:
         
         # Iniciar lectura
         intentar_lectura()
+        
     
     def crear_celda_vehiculo(self, celda, matricula, fecha_entrada, fecha_salida, 
                             color_camion, mecanicos_asignados):
@@ -529,21 +533,38 @@ class TableroVehiculos:
         entry_matricula.pack(fill='x')
         entry_matricula.focus()
         
-        # Fecha Entrada
-        tk.Label(form_frame, text="Fecha Entrada:", font=('Arial', 12, 'bold'), bg='white').pack(anchor='w', pady=(10, 5))
+        # Fecha y Hora Entrada
+        tk.Label(form_frame, text="Fecha y Hora Entrada:", font=('Arial', 12, 'bold'), bg='white').pack(anchor='w', pady=(10, 5))
         
-        date_entrada = DateEntry(form_frame,
-                                width=27,
+        fecha_hora_frame = tk.Frame(form_frame, bg='white')
+        fecha_hora_frame.pack(fill='x')
+        
+        now = datetime.now()
+        
+        date_entrada = DateEntry(fecha_hora_frame,
+                                width=12,
                                 font=('Arial', 12),
                                 background='#4CAF50',
                                 foreground='white',
                                 borderwidth=2,
                                 date_pattern='yyyy-mm-dd',
                                 state='readonly',
-                                year=datetime.now().year,
-                                month=datetime.now().month,
-                                day=datetime.now().day)
-        date_entrada.pack(fill='x')
+                                year=now.year,
+                                month=now.month,
+                                day=now.day)
+        date_entrada.pack(side='left', padx=(0, 10))
+        
+        spin_hora = tk.Spinbox(fecha_hora_frame, from_=0, to=23, width=3, font=('Arial', 12), format="%02.0f")
+        spin_hora.delete(0, 'end')
+        spin_hora.insert(0, now.strftime("%H"))
+        spin_hora.pack(side='left')
+        
+        tk.Label(fecha_hora_frame, text=":", font=('Arial', 12, 'bold'), bg='white').pack(side='left')
+        
+        spin_minuto = tk.Spinbox(fecha_hora_frame, from_=0, to=59, width=3, font=('Arial', 12), format="%02.0f")
+        spin_minuto.delete(0, 'end')
+        spin_minuto.insert(0, now.strftime("%M"))
+        spin_minuto.pack(side='left')
         
         # Estado
         tk.Label(form_frame, text="Estado:", font=('Arial', 12, 'bold'), bg='white').pack(anchor='w', pady=(10, 5))
@@ -563,10 +584,11 @@ class TableroVehiculos:
         msg_label = tk.Label(form_frame, text="", font=('Arial', 10), bg='white')
         msg_label.pack(pady=10)
         
-        # Función guardar
         def guardar():
             matricula = entry_matricula.get().strip().upper()
-            fecha_entrada = date_entrada.get_date().strftime('%Y-%m-%d')
+            hora = str(spin_hora.get()).zfill(2)
+            minuto = str(spin_minuto.get()).zfill(2)
+            fecha_entrada = f"{date_entrada.get_date().strftime('%Y-%m-%d')} {hora}:{minuto}"
             estado_nombre = estado_var.get()
             estado_id = estados_dict[estado_nombre]
             

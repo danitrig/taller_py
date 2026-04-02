@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import sqlite3
+from database import DatabaseManager
 
 class GestionMecanicos:
     def __init__(self, root, menu_principal):
@@ -12,9 +13,11 @@ class GestionMecanicos:
         self.root.configure(bg='#f0f0f0')
         
         # Conectar a la base de datos
-        self.conexion = sqlite3.connect('taller_camarina.db')
+        self.db_manager = DatabaseManager()
+        self.conexion = self.db_manager.get_connection()
         self.cursor = self.conexion.cursor()
-        self.cursor.execute("PRAGMA foreign_keys = ON")
+        if self.db_manager.tipo_bd == 'sqlite':
+            self.cursor.execute("PRAGMA foreign_keys = ON")
         
         # Variables para ordenamiento
         self.orden_columna = 'nombre'  # Columna por defecto
