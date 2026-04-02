@@ -1,7 +1,4 @@
 import tkinter as tk
-import sqlite3
-import subprocess
-import sys
 
 class MenuPrincipal:
     def __init__(self, root):
@@ -86,18 +83,14 @@ class MenuPrincipal:
     
     def oscurecer_color(self, color):
         """Oscurece un color hex para el efecto hover"""
-        # Simplificado: solo resta valores
-        if color == "#4CAF50":
-            return "#45a049"
-        elif color == "#2196F3":
-            return "#0b7dda"
-        elif color == "#FF9800":
-            return "#e68900"
-        elif color == "#9C27B0":
-            return "#7b1fa2"
-        elif color == "#f44336":
-            return "#da190b"
-        return color
+        colores_hover = {
+            "#4CAF50": "#45a049",
+            "#2196F3": "#0b7dda",
+            "#FF9800": "#e68900",
+            "#9C27B0": "#7b1fa2",
+            "#f44336": "#da190b"
+        }
+        return colores_hover.get(color, color)
     
     def abrir_tablero(self):
         """Abre el tablero de vehículos"""
@@ -107,16 +100,16 @@ class MenuPrincipal:
         ventana_tablero = tk.Toplevel()
         ventana_tablero.state('zoomed')  # Maximizar la ventana del tablero
         from tablero_vehiculos import TableroVehiculos
-        app = TableroVehiculos(ventana_tablero, self.root)
+        TableroVehiculos(ventana_tablero, self.root)
     
     def abrir_gestion_vehiculos(self):
         """Abre gestión de vehículos"""
-        #self.root.withdraw()
+        self.root.withdraw()
         
         ventana_gestion = tk.Toplevel()
         ventana_gestion.state('zoomed')
         from gestion_vehiculos import GestionVehiculos
-        app = GestionVehiculos(ventana_gestion, self.root)
+        GestionVehiculos(ventana_gestion, self.root)
     
     def abrir_gestion_mecanicos(self):
         """Abre gestión de mecánicos"""
@@ -125,7 +118,7 @@ class MenuPrincipal:
         ventana_gestion = tk.Toplevel()
         ventana_gestion.state('zoomed')
         from gestion_mecanicos import GestionMecanicos
-        app = GestionMecanicos(ventana_gestion, self.root)
+        GestionMecanicos(ventana_gestion, self.root)
         
     def abrir_gestion_estados(self):
         """Abre gestión de estados"""
@@ -134,7 +127,7 @@ class MenuPrincipal:
         ventana_gestion = tk.Toplevel()
         ventana_gestion.state('zoomed')
         from gestion_estados import GestionEstados
-        app = GestionEstados(ventana_gestion, self.root)
+        GestionEstados(ventana_gestion, self.root)
     
     def salir(self):
         """Cierra la aplicación"""

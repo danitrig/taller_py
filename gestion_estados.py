@@ -253,9 +253,9 @@ class GestionEstados:
             # Determinar tabla de BD
             tabla_bd = 'estados_camion' if tipo == 'camion' else 'estados_trabajador'
             
-            # Ejecutar DELETE
-            self.cursor.execute(f'DELETE FROM {tabla_bd} WHERE id = ?', (estado_id,))
-            self.conexion.commit()
+            with self.conexion:
+                # Ejecutar DELETE
+                self.cursor.execute(f'DELETE FROM {tabla_bd} WHERE id = ?', (estado_id,))
             
             # Mensaje de éxito
             messagebox.showinfo("Éxito", f"Estado '{nombre_estado}' eliminado correctamente")
@@ -380,19 +380,19 @@ class GestionEstados:
                 return
             
             try:
-                if modo == 'nuevo':
-                    self.cursor.execute(f'''
-                        INSERT INTO {tabla_bd} (nombre_estado, color)
-                        VALUES (?, ?)
-                    ''', (nombre, color))
-                else:
-                    self.cursor.execute(f'''
-                        UPDATE {tabla_bd}
-                        SET nombre_estado = ?, color = ?
-                        WHERE id = ?
-                    ''', (nombre, color, estado_id))
+                with self.conexion:
+                    if modo == 'nuevo':
+                        self.cursor.execute(f'''
+                            INSERT INTO {tabla_bd} (nombre_estado, color)
+                            VALUES (?, ?)
+                        ''', (nombre, color))
+                    else:
+                        self.cursor.execute(f'''
+                            UPDATE {tabla_bd}
+                            SET nombre_estado = ?, color = ?
+                            WHERE id = ?
+                        ''', (nombre, color, estado_id))
                 
-                self.conexion.commit()
                 msg_label.config(text="✅ Guardado correctamente", fg='green')
                 ventana.after(1000, ventana.destroy)
                 self.cargar_estados(tipo)
@@ -430,8 +430,9 @@ class GestionEstados:
         """Vuelve al menú principal"""
         self.conexion.close()
         self.root.destroy()
-        self.menu_principal.state('zoomed')
-        self.menu_principal.deiconify()
+        if self.menu_principal:
+            self.menu_principal.state('zoomed')
+            self.menu_principal.deiconify()
 
 if __name__ == "__main__":
     root = tk.Tk()

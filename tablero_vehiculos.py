@@ -575,11 +575,11 @@ class TableroVehiculos:
                 return
             
             try:
-                self.cursor.execute('''
-                    INSERT INTO detalles (matricula, fecha_entrada, fecha_salida, estado_camion_id)
-                    VALUES (?, ?, NULL, ?)
-                ''', (matricula, fecha_entrada, estado_id))
-                self.conexion.commit()
+                with self.conexion:
+                    self.cursor.execute('''
+                        INSERT INTO detalles (matricula, fecha_entrada, fecha_salida, estado_camion_id)
+                        VALUES (?, ?, NULL, ?)
+                    ''', (matricula, fecha_entrada, estado_id))
                 
                 msg_label.config(text="✅ Vehículo añadido correctamente", fg='green')
                 ventana.after(1000, lambda: [ventana.destroy(), self.refrescar()])
@@ -910,11 +910,11 @@ class TableroVehiculos:
                 estado_id = estados_dict[estado_nombre]
                 
                 try:
-                    self.cursor.execute('''
-                        INSERT INTO asignaciones (detalle_id, mecanico_id, fecha_asignacion, estado_trabajador_id)
-                        VALUES (?, ?, ?, ?)
-                    ''', (vehiculo_id, mecanico_id, datetime.now().strftime('%Y-%m-%d'), estado_id))
-                    self.conexion.commit()
+                    with self.conexion:
+                        self.cursor.execute('''
+                            INSERT INTO asignaciones (detalle_id, mecanico_id, fecha_asignacion, estado_trabajador_id)
+                            VALUES (?, ?, ?, ?)
+                        ''', (vehiculo_id, mecanico_id, datetime.now().strftime('%Y-%m-%d'), estado_id))
                     
                     # Cerrar y reabrir ventana SIN refrescar el tablero
                     ventana.destroy()
@@ -944,12 +944,12 @@ class TableroVehiculos:
             nuevo_estado_id = estados_vehiculo_dict[nuevo_estado_nombre]
             
             try:
-                self.cursor.execute('''
-                    UPDATE detalles
-                    SET estado_camion_id = ?
-                    WHERE id = ?
-                ''', (nuevo_estado_id, vehiculo_id))
-                self.conexion.commit()
+                with self.conexion:
+                    self.cursor.execute('''
+                        UPDATE detalles
+                        SET estado_camion_id = ?
+                        WHERE id = ?
+                    ''', (nuevo_estado_id, vehiculo_id))
                 
                 # Cerrar ventana y refrescar tablero
                 ventana.destroy()
@@ -1021,12 +1021,12 @@ class TableroVehiculos:
     def actualizar_estado_asignacion(self, asignacion_id, nuevo_estado_id, ventana_cambio, ventana_padre, vehiculo_id, matricula):
         """Actualiza el estado en la BD"""
         try:
-            self.cursor.execute('''
-                UPDATE asignaciones
-                SET estado_trabajador_id = ?
-                WHERE id = ?
-            ''', (nuevo_estado_id, asignacion_id))
-            self.conexion.commit()
+            with self.conexion:
+                self.cursor.execute('''
+                    UPDATE asignaciones
+                    SET estado_trabajador_id = ?
+                    WHERE id = ?
+                ''', (nuevo_estado_id, asignacion_id))
             
             # Cerrar ventanas y reabrir
             ventana_cambio.destroy()
@@ -1045,8 +1045,8 @@ class TableroVehiculos:
         
         if respuesta:
             try:
-                self.cursor.execute('DELETE FROM asignaciones WHERE id = ?', (asignacion_id,))
-                self.conexion.commit()
+                with self.conexion:
+                    self.cursor.execute('DELETE FROM asignaciones WHERE id = ?', (asignacion_id,))
                 
                 # Cerrar y reabrir ventana
                 ventana_padre.destroy()
@@ -1095,12 +1095,12 @@ class TableroVehiculos:
     def actualizar_estado_asignacion_sin_refrescar(self, asignacion_id, nuevo_estado_id, ventana_cambio, ventana_padre, vehiculo_id, matricula):
         """Actualiza el estado en la BD SIN refrescar el tablero"""
         try:
-            self.cursor.execute('''
-                UPDATE asignaciones
-                SET estado_trabajador_id = ?
-                WHERE id = ?
-            ''', (nuevo_estado_id, asignacion_id))
-            self.conexion.commit()
+            with self.conexion:
+                self.cursor.execute('''
+                    UPDATE asignaciones
+                    SET estado_trabajador_id = ?
+                    WHERE id = ?
+                ''', (nuevo_estado_id, asignacion_id))
             
             # Cerrar ventanas y reabrir SIN refrescar tablero
             ventana_cambio.destroy()
@@ -1118,8 +1118,8 @@ class TableroVehiculos:
         
         if respuesta:
             try:
-                self.cursor.execute('DELETE FROM asignaciones WHERE id = ?', (asignacion_id,))
-                self.conexion.commit()
+                with self.conexion:
+                    self.cursor.execute('DELETE FROM asignaciones WHERE id = ?', (asignacion_id,))
                 
                 # Cerrar y reabrir ventana SIN refrescar tablero
                 ventana_padre.destroy()
@@ -1140,8 +1140,9 @@ class TableroVehiculos:
         """Vuelve al menú principal"""
         self.conexion.close()
         self.root.destroy()
-        self.menu_principal.state('zoomed')
-        self.menu_principal.deiconify()
+        if self.menu_principal:
+            self.menu_principal.state('zoomed')
+            self.menu_principal.deiconify()
 
     def abrir_gestionar_asignaciones_autenticado(self, matricula):
         """Abre gestión de asignaciones según el rol del usuario"""
@@ -1331,12 +1332,12 @@ class TableroVehiculos:
     def cambiar_mi_estado(self, asignacion_id, nuevo_estado_id, ventana):
         """Cambia el estado de la asignación del mecánico"""
         try:
-            self.cursor.execute('''
-                UPDATE asignaciones
-                SET estado_trabajador_id = ?
-                WHERE id = ?
-            ''', (nuevo_estado_id, asignacion_id))
-            self.conexion.commit()
+            with self.conexion:
+                self.cursor.execute('''
+                    UPDATE asignaciones
+                    SET estado_trabajador_id = ?
+                    WHERE id = ?
+                ''', (nuevo_estado_id, asignacion_id))
             
             ventana.destroy()
             self.refrescar()
@@ -1347,11 +1348,11 @@ class TableroVehiculos:
     def asignarme_vehiculo(self, vehiculo_id, mecanico_id, estado_id, ventana):
         """Asigna el mecánico al vehículo"""
         try:
-            self.cursor.execute('''
-                INSERT INTO asignaciones (detalle_id, mecanico_id, fecha_asignacion, estado_trabajador_id)
-                VALUES (?, ?, ?, ?)
-            ''', (vehiculo_id, mecanico_id, datetime.now().strftime('%Y-%m-%d'), estado_id))
-            self.conexion.commit()
+            with self.conexion:
+                self.cursor.execute('''
+                    INSERT INTO asignaciones (detalle_id, mecanico_id, fecha_asignacion, estado_trabajador_id)
+                    VALUES (?, ?, ?, ?)
+                ''', (vehiculo_id, mecanico_id, datetime.now().strftime('%Y-%m-%d'), estado_id))
             
             ventana.destroy()
             self.refrescar()

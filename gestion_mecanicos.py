@@ -215,11 +215,11 @@ class GestionMecanicos:
         
         if respuesta:
             try:
-                # Eliminar asignaciones primero
-                self.cursor.execute('DELETE FROM asignaciones WHERE mecanico_id = ?', (mecanico_id,))
-                # Eliminar mecánico
-                self.cursor.execute('DELETE FROM mecanicos WHERE id = ?', (mecanico_id,))
-                self.conexion.commit()
+                with self.conexion:
+                    # Eliminar asignaciones primero
+                    self.cursor.execute('DELETE FROM asignaciones WHERE mecanico_id = ?', (mecanico_id,))
+                    # Eliminar mecánico
+                    self.cursor.execute('DELETE FROM mecanicos WHERE id = ?', (mecanico_id,))
                 
                 messagebox.showinfo("Éxito", "Mecánico eliminado correctamente")
                 self.cargar_mecanicos()
@@ -332,19 +332,19 @@ class GestionMecanicos:
                 return
             
             try:
-                if modo == 'nuevo':
-                    self.cursor.execute('''
-                        INSERT INTO mecanicos (nombre, codigo_nfc, rol_id)
-                        VALUES (?, ?, ?)
-                    ''', (nombre, codigo_nfc, rol_id))
-                else:
-                    self.cursor.execute('''
-                        UPDATE mecanicos
-                        SET nombre = ?, codigo_nfc = ?, rol_id = ?
-                        WHERE id = ?
-                    ''', (nombre, codigo_nfc, rol_id, mecanico_id))
+                with self.conexion:
+                    if modo == 'nuevo':
+                        self.cursor.execute('''
+                            INSERT INTO mecanicos (nombre, codigo_nfc, rol_id)
+                            VALUES (?, ?, ?)
+                        ''', (nombre, codigo_nfc, rol_id))
+                    else:
+                        self.cursor.execute('''
+                            UPDATE mecanicos
+                            SET nombre = ?, codigo_nfc = ?, rol_id = ?
+                            WHERE id = ?
+                        ''', (nombre, codigo_nfc, rol_id, mecanico_id))
                 
-                self.conexion.commit()
                 msg_label.config(text="✅ Guardado correctamente", fg='green')
                 ventana.after(1000, ventana.destroy)
                 self.cargar_mecanicos()
@@ -382,8 +382,9 @@ class GestionMecanicos:
         """Vuelve al menú principal"""
         self.conexion.close()
         self.root.destroy()
-        self.menu_principal.state('zoomed')
-        self.menu_principal.deiconify()
+        if self.menu_principal:
+            self.menu_principal.state('zoomed')
+            self.menu_principal.deiconify()
     def abrir_lector_nfc(self, entry_destino):
         """Abre ventana para leer código NFC y escribirlo en el entry"""
         from nfc_reader import NFCReader

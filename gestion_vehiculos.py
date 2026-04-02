@@ -221,11 +221,11 @@ class GestionVehiculos:
         
         if respuesta:
             try:
-                # Eliminar asignaciones primero
-                self.cursor.execute('DELETE FROM asignaciones WHERE detalle_id = ?', (vehiculo_id,))
-                # Eliminar vehículo
-                self.cursor.execute('DELETE FROM detalles WHERE id = ?', (vehiculo_id,))
-                self.conexion.commit()
+                with self.conexion:
+                    # Eliminar asignaciones primero
+                    self.cursor.execute('DELETE FROM asignaciones WHERE detalle_id = ?', (vehiculo_id,))
+                    # Eliminar vehículo
+                    self.cursor.execute('DELETE FROM detalles WHERE id = ?', (vehiculo_id,))
                 
                 messagebox.showinfo("Éxito", "Vehículo eliminado correctamente")
                 self.cargar_vehiculos()
@@ -389,19 +389,19 @@ class GestionVehiculos:
                 return
             
             try:
-                if modo == 'nuevo':
-                    self.cursor.execute('''
-                        INSERT INTO detalles (matricula, fecha_entrada, fecha_salida, estado_camion_id)
-                        VALUES (?, ?, ?, ?)
-                    ''', (matricula, fecha_entrada, fecha_salida, estado_id))
-                else:
-                    self.cursor.execute('''
-                        UPDATE detalles
-                        SET matricula = ?, fecha_entrada = ?, fecha_salida = ?, estado_camion_id = ?
-                        WHERE id = ?
-                    ''', (matricula, fecha_entrada, fecha_salida, estado_id, vehiculo_id))
+                with self.conexion:
+                    if modo == 'nuevo':
+                        self.cursor.execute('''
+                            INSERT INTO detalles (matricula, fecha_entrada, fecha_salida, estado_camion_id)
+                            VALUES (?, ?, ?, ?)
+                        ''', (matricula, fecha_entrada, fecha_salida, estado_id))
+                    else:
+                        self.cursor.execute('''
+                            UPDATE detalles
+                            SET matricula = ?, fecha_entrada = ?, fecha_salida = ?, estado_camion_id = ?
+                            WHERE id = ?
+                        ''', (matricula, fecha_entrada, fecha_salida, estado_id, vehiculo_id))
                 
-                self.conexion.commit()
                 msg_label.config(text="✅ Guardado correctamente", fg='green')
                 ventana.after(1000, ventana.destroy)
                 self.cargar_vehiculos()
@@ -436,8 +436,9 @@ class GestionVehiculos:
         """Vuelve al menú principal"""
         self.conexion.close()
         self.root.destroy()
-        self.menu_principal.state('zoomed')
-        self.menu_principal.deiconify()
+        if self.menu_principal:
+            self.menu_principal.state('zoomed')
+            self.menu_principal.deiconify()
 
 if __name__ == "__main__":
     root = tk.Tk()
