@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import ttk, messagebox
 import sqlite3
 from database import DatabaseManager
 from tkcalendar import DateEntry
@@ -163,20 +163,22 @@ class TableroVehiculos:
             # Mostrar todos
             query = '''
                 SELECT d.id, d.matricula, d.fecha_entrada, d.fecha_salida, 
-                       ec.color, ec.nombre_estado
+                       ec.color, ec.nombre_estado, c.nombre_cliente, d.num_factura
                 FROM detalles d
                 JOIN estados_camion ec ON d.estado_camion_id = ec.id
-                ORDER BY d.id ASC
+                LEFT JOIN clientes c ON d.cl_id = c.id_cliente
+                ORDER BY d.id DESC
             '''
         else:
             # Ocultar terminados
             query = '''
                 SELECT d.id, d.matricula, d.fecha_entrada, d.fecha_salida, 
-                       ec.color, ec.nombre_estado
+                       ec.color, ec.nombre_estado, c.nombre_cliente, d.num_factura
                 FROM detalles d
                 JOIN estados_camion ec ON d.estado_camion_id = ec.id
+                LEFT JOIN clientes c ON d.cl_id = c.id_cliente
                 WHERE ec.nombre_estado != 'Terminado'
-                ORDER BY d.id ASC
+                ORDER BY d.id DESC
             '''
         
         self.cursor.execute(query)
@@ -220,22 +222,29 @@ class TableroVehiculos:
                     vehiculo_id = vehiculo[0]
                     matricula = vehiculo[1]
                     fecha_entrada = vehiculo[2]
+                    vehiculo = vehiculos_pagina[posicion]
+                    vehiculo_id = vehiculo[0]
+                    matricula = vehiculo[1]
+                    fecha_entrada = vehiculo[2]
                     fecha_salida = vehiculo[3]
                     color_camion = vehiculo[4]
                     nombre_estado_camion = vehiculo[5]
+                    nombre_cliente = vehiculo[6] if vehiculo[6] else ""
+                    num_factura = vehiculo[7] if vehiculo[7] else ""
                     
-                    # Buscar mecánicos asignados
+                    # Buscar tareas y sus mecánicos asignados
+                    # Manejo dual asegurando que se extraen correctamente las tareas de dt_id
                     self.cursor.execute('''
-                        SELECT m.nombre, et.color, et.nombre_estado
-                        FROM asignaciones a
-                        JOIN mecanicos m ON a.mecanico_id = m.id
-                        JOIN estados_trabajador et ON a.estado_trabajador_id = et.id
-                        WHERE a.detalle_id = ?
-                        ORDER BY a.fecha_asignacion DESC
-                        LIMIT 5
+                        SELECT t.descrip, m.id, m.nombre, et.color
+                        FROM tareas t
+                        LEFT JOIN asignaciones a ON t.id_tarea = a.tarea_id
+                        LEFT JOIN mecanicos m ON a.mecanico_id = m.id
+                        LEFT JOIN estados_trabajador et ON a.estado_trabajador_id = et.id
+                        WHERE t.id_dt = ?
+                        ORDER BY t.id_tarea ASC
                     ''', (vehiculo_id,))
                     
-                    mecanicos_asignados = self.cursor.fetchall()
+                    tareas_asignadas = self.cursor.fetchall()
                     
                 else:
                     # Celda vacía
@@ -243,7 +252,9 @@ class TableroVehiculos:
                     fecha_entrada = ""
                     fecha_salida = None
                     color_camion = "#FFFFFF"
-                    mecanicos_asignados = []
+                    nombre_cliente = ""
+                    num_factura = ""
+                    tareas_asignadas = []
                 
                 # Crear la celda principal
                 celda = tk.Frame(grid_frame, 
@@ -259,14 +270,11 @@ class TableroVehiculos:
                 # Solo mostrar contenido si hay vehículo
                 if matricula:
                     self.crear_celda_vehiculo(celda, matricula, fecha_entrada, fecha_salida, 
-                                             color_camion, mecanicos_asignados)
+                                             color_camion, num_factura, nombre_cliente, tareas_asignadas)
                 
                 posicion += 1
     def autenticar_nfc(self, accion_callback, *args):
-        # BYPASS DE NFC
-        self.usuario_actual = {'id': 1, 'nombre': 'Desarrollador', 'rol': 'jefe'}
-        accion_callback(*args)
-        return
+
 
         #Ventana modal para autenticar con NFC antes de ejecutar una acción
 
@@ -411,81 +419,105 @@ class TableroVehiculos:
         
     
     def crear_celda_vehiculo(self, celda, matricula, fecha_entrada, fecha_salida, 
-                            color_camion, mecanicos_asignados):
+                            color_camion, num_factura, nombre_cliente, tareas_asignadas):
         """Crea el contenido de una celda de vehículo"""
         
-        # CABECERA
-        cabecera = tk.Frame(celda, bg=color_camion, height=75)
-        cabecera.pack(fill='x')
-        cabecera.pack_propagate(False)
-        
-        # Fechas
-        fechas_frame = tk.Frame(cabecera, bg=color_camion)
-        fechas_frame.pack(pady=3)
-        
-        fecha_ent_label = tk.Label(fechas_frame, 
-                            text=fecha_entrada,
-                            font=('Arial', 10, 'bold'),
-                            bg=color_camion,
-                            fg='black')
-        fecha_ent_label.pack(side='left')
-        
-        separador_fechas = tk.Label(fechas_frame,
-                            text=" | ",
-                            font=('Arial', 10, 'bold'),
-                            bg=color_camion,
-                            fg='black')
-        separador_fechas.pack(side='left')
-        
+        def format_fecha(f_str):
+            if not f_str: return ""
+            partes = str(f_str).split(' ')
+            fs = partes[0].split('-')
+            hora = partes[1][:5] if len(partes) > 1 else ""
+            if len(fs) == 3:
+                return f"{fs[2]}-{fs[1]} {hora}".strip()
+            return f_str
+
+        fecha_entrada = format_fecha(fecha_entrada)
+        fecha_texto = fecha_entrada
         if fecha_salida:
-            fecha_sal_label = tk.Label(fechas_frame, 
-                                text=fecha_salida,
-                                font=('Arial', 10, 'bold'),
-                                bg=color_camion,
-                                fg='black')
-            fecha_sal_label.pack(side='left')
-        else:
-            fecha_vacia = tk.Label(fechas_frame, 
-                                text="        ",
-                                font=('Arial', 10, 'bold'),
-                                bg=color_camion)
-            fecha_vacia.pack(side='left')
+            fecha_salida = format_fecha(fecha_salida)
+            fecha_texto += f"  |  {fecha_salida}"
         
-        # Matrícula
+        # CABECERA
+        cabecera = tk.Frame(celda, bg=color_camion)
+        cabecera.pack(fill='x')
+        
+        # Etiqueta unificada de fechas
+        tk.Label(cabecera, 
+                 text=fecha_texto,
+                 font=('Arial', 8, 'bold'),
+                 bg=color_camion,
+                 fg='#333333').pack(pady=(2, 0))
+        
+        # Num factura SIEMPRE OCUPA ESPACIO, si está vacío pongo espacios
+        tk.Label(cabecera, 
+                 text=num_factura if num_factura else " ",
+                 font=('Arial', 10, 'bold'),
+                 bg=color_camion,
+                 fg='#222222').pack()
+                     
+        # Matrícula (Reducido de 24 a 18 para que quepa en 184px de ancho)
         matricula_label = tk.Label(cabecera, 
                             text=matricula,
-                            font=('Arial', 22, 'bold'),
+                            font=('Arial', 18, 'bold'),
                             bg=color_camion,
                             fg='black')
-        matricula_label.pack(pady=3)
+        matricula_label.pack(pady=0)
         
-        # LÍNEA SEPARADORA
-        linea_separadora = tk.Frame(celda, bg='black', height=3)
-        linea_separadora.pack(fill='x')
+        # Nombre Cliente SIEMPRE OCUPA ESPACIO
+        tk.Label(cabecera, 
+                 text=nombre_cliente.upper() if nombre_cliente else " ",
+                 font=('Arial', 9, 'bold'),
+                 bg=color_camion,
+                 fg='#333333').pack(pady=(0, 2))
         
-        # MECÁNICOS
-        mecanicos_frame = tk.Frame(celda, bg='#FFFFFF')
-        mecanicos_frame.pack(fill='both', expand=True, padx=3, pady=3)
+        # LÍNEA SEPARADORA FINA MÚLTIPLE (Estilo imagen)
+        tk.Frame(celda, bg='white', height=2).pack(fill='x')
+        tk.Frame(celda, bg='black', height=2).pack(fill='x')
         
-        if mecanicos_asignados:
-            for mecanico_data in mecanicos_asignados:
-                nombre_mecanico = mecanico_data[0]
-                color_estado_trabajador = mecanico_data[1]
+        # TAREAS
+        tareas_frame = tk.Frame(celda, bg='#FFFFFF')
+        tareas_frame.pack(fill='both', expand=True, padx=0, pady=0)
+        
+        if tareas_asignadas:
+            for tarea_data in tareas_asignadas:
+                descrip_tarea = tarea_data[0] or ""
+                mecanico_id = tarea_data[1]
+                nombre_mecanico = tarea_data[2] or ""
+                color_et = tarea_data[3] or "#DDDDDD"  # GRIS si no hay mecánico o estado
                 
-                mecanico_celda = tk.Frame(mecanicos_frame,
-                                        bg=color_estado_trabajador,
-                                        relief='solid',
-                                        borderwidth=1,
-                                        height=28)
-                mecanico_celda.pack(fill='x', pady=2)
-                mecanico_celda.pack_propagate(False)
+                # Tratar iniciales del mecánico (Ej: "02 DMC")
+                if mecanico_id and nombre_mecanico:
+                    if len(nombre_mecanico) <= 3:
+                        iniciales = nombre_mecanico.upper()
+                    else:
+                        partes_nombre = nombre_mecanico.split()
+                        if len(partes_nombre) == 1:
+                            iniciales = nombre_mecanico[:3].upper()
+                        else:
+                            iniciales = "".join([p[0].upper() for p in partes_nombre[:3]])
+                    mecanico_texto = f"{mecanico_id:02d} {iniciales}"
+                else:
+                    mecanico_texto = ""
                 
-                mecanico_label = tk.Label(mecanico_celda,
-                                text=nombre_mecanico,
-                                font=('Arial', 11, 'bold'),
-                                bg=color_estado_trabajador,
-                                fg='black')
-                mecanico_label.pack(expand=True)
+                # Fila contenedora de esta tarea
+                fila_tarea = tk.Frame(tareas_frame, bg=color_et, borderwidth=1, relief='solid')
+                fila_tarea.pack(fill='x', pady=0)
+
+                # Columna Izquierda (Mecánico)
+                left_col = tk.Frame(fila_tarea, bg=color_et, width=65)
+                left_col.pack(side='left', fill='y')
+                left_col.pack_propagate(False)
+                
+                tk.Label(left_col, text=mecanico_texto, font=('Arial', 10, 'bold'), bg=color_et, fg='black').pack(expand=True)
+                
+                # Separador vertical
+                tk.Frame(fila_tarea, bg='black', width=1).pack(side='left', fill='y')
+                
+                # Columna Derecha (Tarea descripción)
+                right_col = tk.Frame(fila_tarea, bg=color_et)
+                right_col.pack(side='left', fill='both', expand=True)
+                
+                tk.Label(right_col, text=descrip_tarea, font=('Arial', 9), bg=color_et, fg='black', justify='left', anchor='w').pack(fill='both', expand=True, padx=4)
         
         # Hacer toda la celda clickeable
         # Hacer toda la celda clickeable CON autenticación NFC
@@ -509,7 +541,7 @@ class TableroVehiculos:
         # Crear ventana
         ventana = tk.Toplevel(self.root)
         ventana.title("Añadir Vehículo")
-        ventana.geometry("550x500")
+        ventana.geometry("550x700")
         ventana.resizable(False, False)
         ventana.grab_set()
         ventana.transient(self.root)
@@ -532,6 +564,28 @@ class TableroVehiculos:
         entry_matricula = tk.Entry(form_frame, font=('Arial', 12), width=30)
         entry_matricula.pack(fill='x')
         entry_matricula.focus()
+        
+        # Cliente (Combobox)
+        tk.Label(form_frame, text="Cliente:", font=('Arial', 12, 'bold'), bg='white').pack(anchor='w', pady=(10, 5))
+        try:
+            self.cursor.execute('SELECT id_cliente, nombre_cliente FROM clientes ORDER BY nombre_cliente ASC')
+            clientes_db = self.cursor.fetchall()
+        except:
+            clientes_db = []
+            
+        clientes_dict = {c[1]: c[0] for c in clientes_db}
+        cliente_var = tk.StringVar()
+        
+        opciones_clientes = ["-- Sin Cliente --"] + list(clientes_dict.keys())
+        cliente_var.set(opciones_clientes[0])
+        
+        combo_clientes = ttk.Combobox(form_frame, textvariable=cliente_var, values=opciones_clientes, font=('Arial', 12), state='readonly')
+        combo_clientes.pack(fill='x')
+        
+        # Factura
+        tk.Label(form_frame, text="Nº Factura (Opcional):", font=('Arial', 12, 'bold'), bg='white').pack(anchor='w', pady=(10, 5))
+        entry_factura = tk.Entry(form_frame, font=('Arial', 12), width=30)
+        entry_factura.pack(fill='x')
         
         # Fecha y Hora Entrada
         tk.Label(form_frame, text="Fecha y Hora Entrada:", font=('Arial', 12, 'bold'), bg='white').pack(anchor='w', pady=(10, 5))
@@ -592,6 +646,10 @@ class TableroVehiculos:
             estado_nombre = estado_var.get()
             estado_id = estados_dict[estado_nombre]
             
+            factura_val = entry_factura.get().strip() or None
+            cl_nombre = cliente_var.get()
+            cl_id = clientes_dict.get(cl_nombre, None)
+            
             if not matricula:
                 msg_label.config(text="⚠️ La matrícula es obligatoria", fg='red')
                 return
@@ -599,9 +657,9 @@ class TableroVehiculos:
             try:
                 with self.conexion:
                     self.cursor.execute('''
-                        INSERT INTO detalles (matricula, fecha_entrada, fecha_salida, estado_camion_id)
-                        VALUES (?, ?, NULL, ?)
-                    ''', (matricula, fecha_entrada, estado_id))
+                        INSERT INTO detalles (matricula, fecha_entrada, fecha_salida, estado_camion_id, num_factura, cl_id)
+                        VALUES (?, ?, NULL, ?, ?, ?)
+                    ''', (matricula, fecha_entrada, estado_id, factura_val, cl_id))
                 
                 msg_label.config(text="✅ Vehículo añadido correctamente", fg='green')
                 ventana.after(1000, lambda: [ventana.destroy(), self.refrescar()])
@@ -740,416 +798,221 @@ class TableroVehiculos:
                                 command=ventana.destroy)
         btn_cancelar.pack(side='left', padx=10)
         
-    def abrir_gestionar_asignaciones(self, matricula):
-        """Ventana para gestionar asignaciones de un vehículo"""
-        
-        # Obtener información del vehículo
-        self.cursor.execute('''
-            SELECT d.id, d.matricula, ec.nombre_estado, ec.color, d.estado_camion_id
-            FROM detalles d
-            JOIN estados_camion ec ON d.estado_camion_id = ec.id
-            WHERE d.matricula = ?
-        ''', (matricula,))
-        
+
+    def abrir_gestionar_tareas(self, matricula):
+        """Ventana principal (Jefe) para gestionar tareas de un vehículo"""
+        self.cursor.execute('SELECT d.id, d.matricula, ec.nombre_estado, ec.color FROM detalles d JOIN estados_camion ec ON d.estado_camion_id = ec.id WHERE d.matricula = ?', (matricula,))
         vehiculo = self.cursor.fetchone()
-        if not vehiculo:
-            return
+        if not vehiculo: return
+        vehiculo_id, matricula, estado_vehiculo, color_vehiculo = vehiculo
         
-        vehiculo_id = vehiculo[0]
-        matricula = vehiculo[1]
-        estado_vehiculo = vehiculo[2]
-        color_vehiculo = vehiculo[3]
-        estado_vehiculo_id = vehiculo[4]
-        
-        # Crear ventana
         ventana = tk.Toplevel(self.root)
-        ventana.title(f"Asignaciones - {matricula}")
-        ventana.geometry("700x600")
+        ventana.title(f"Tareas - {matricula}")
+        ventana.geometry("900x750")
         ventana.resizable(False, False)
         ventana.grab_set()
         ventana.transient(self.root)
         
-        # Título con color del estado del vehículo
-        titulo = tk.Label(ventana,
-                        text=f"🚛 ASIGNACIONES - {matricula}",
-                        font=('Arial', 18, 'bold'),
-                        bg=color_vehiculo,
-                        fg='black',
-                        pady=15)
-        titulo.pack(fill='x')
+        tk.Label(ventana, text=f"🚛 TAREAS - {matricula}", font=('Arial', 18, 'bold'), bg=color_vehiculo, fg='black', pady=15).pack(fill='x')
         
-        # Frame para subtítulo con estado selector
-        subtitulo_frame = tk.Frame(ventana, bg='white', pady=10)
-        subtitulo_frame.pack(fill='x')
-        
-        # Texto del estado
-        tk.Label(subtitulo_frame,
-                text="Estado del vehículo:",
-                font=('Arial', 12, 'bold'),
-                bg='white',
-                fg='black').pack(side='left', padx=20)
-        
-        # Obtener todos los estados disponibles
-        self.cursor.execute('SELECT id, nombre_estado FROM estados_camion')
-        estados_vehiculo = self.cursor.fetchall()
-        
-        # Variable para el selector
-        estado_vehiculo_var = tk.StringVar()
-        estado_vehiculo_var.set(estado_vehiculo)
-        
-        # Diccionario de estados
-        estados_vehiculo_dict = {e[1]: e[0] for e in estados_vehiculo}
-        
-        # Selector de estado del vehículo
-        combo_estado_vehiculo = tk.OptionMenu(subtitulo_frame, estado_vehiculo_var, *estados_vehiculo_dict.keys())
-        combo_estado_vehiculo.config(font=('Arial', 11), width=20, bg='#E3F2FD')
-        combo_estado_vehiculo.pack(side='left', padx=10)
-        
-        # Frame principal
         main_frame = tk.Frame(ventana, bg='white', padx=20, pady=20)
         main_frame.pack(fill='both', expand=True)
         
-        # Sección: Mecánicos asignados actuales
-        tk.Label(main_frame, 
-                text="👨‍🔧 Mecánicos Asignados:",
-                font=('Arial', 14, 'bold'),
-                bg='white').pack(anchor='w', pady=(0, 10))
+        # Añadir Nueva Tarea
+        add_frame = tk.Frame(main_frame, bg='#f0f0f0', pady=5, padx=5, relief='solid', borderwidth=1)
+        add_frame.pack(fill='x', pady=5)
+        tk.Label(add_frame, text="Nueva Tarea:", font=('Arial', 11, 'bold'), bg='#f0f0f0').pack(side='left', padx=5)
+        entry_tarea = tk.Entry(add_frame, font=('Arial', 11), width=40)
+        entry_tarea.pack(side='left', padx=5)
         
-        # Frame para lista de asignados
-        asignados_frame = tk.Frame(main_frame, bg='#f9f9f9', relief='solid', borderwidth=1)
-        asignados_frame.pack(fill='both', expand=True, pady=(0, 20))
-        
-        # Obtener asignaciones actuales
-        self.cursor.execute('''
-            SELECT a.id, m.nombre, et.nombre_estado, et.color, m.id
-            FROM asignaciones a
-            JOIN mecanicos m ON a.mecanico_id = m.id
-            JOIN estados_trabajador et ON a.estado_trabajador_id = et.id
-            WHERE a.detalle_id = ?
-            ORDER BY a.fecha_asignacion DESC
-        ''', (vehiculo_id,))
-        
-        asignaciones = self.cursor.fetchall()
-        
-        if asignaciones:
-            for asignacion in asignaciones:
-                asignacion_id = asignacion[0]
-                nombre_mecanico = asignacion[1]
-                estado_trabajador = asignacion[2]
-                color_estado = asignacion[3]
-                mecanico_id = asignacion[4]
-                
-                # Frame para cada asignación
-                asig_frame = tk.Frame(asignados_frame, bg=color_estado, relief='solid', borderwidth=1)
-                asig_frame.pack(fill='x', padx=5, pady=3)
-                
-                # Nombre del mecánico
-                tk.Label(asig_frame,
-                        text=f"{nombre_mecanico} - {estado_trabajador}",
-                        font=('Arial', 11, 'bold'),
-                        bg=color_estado,
-                        fg='black').pack(side='left', padx=10, pady=5)
-                
-                # Botón cambiar estado
-                btn_cambiar_estado = tk.Button(asig_frame,
-                                            text="🔄 Cambiar Estado",
-                                            font=('Arial', 9),
-                                            bg='#FF9800',
-                                            fg='white',
-                                            command=lambda aid=asignacion_id: self.cambiar_estado_asignacion_sin_refrescar(aid, ventana, vehiculo_id, matricula))
-                btn_cambiar_estado.pack(side='right', padx=5)
-                
-                # Botón eliminar asignación
-                btn_eliminar = tk.Button(asig_frame,
-                                        text="❌ Quitar",
-                                        font=('Arial', 9),
-                                        bg='#f44336',
-                                        fg='white',
-                                        command=lambda aid=asignacion_id: self.eliminar_asignacion_sin_refrescar(aid, ventana, vehiculo_id, matricula))
-                btn_eliminar.pack(side='right', padx=5)
-        else:
-            tk.Label(asignados_frame,
-                    text="No hay mecánicos asignados",
-                    font=('Arial', 11, 'italic'),
-                    bg='#f9f9f9',
-                    fg='gray').pack(pady=20)
-        
-        # Sección: Añadir nuevo mecánico
-        tk.Label(main_frame,
-                text="➕ Añadir Mecánico:",
-                font=('Arial', 14, 'bold'),
-                bg='white').pack(anchor='w', pady=(10, 10))
-        
-        # Frame para añadir
-        add_frame = tk.Frame(main_frame, bg='white')
-        add_frame.pack(fill='x')
-        
-        # Selector de mecánico
-        tk.Label(add_frame, text="Mecánico:", font=('Arial', 11), bg='white').pack(side='left', padx=(0, 5))
-        
-        # Obtener mecánicos disponibles (que no estén ya asignados)
-        self.cursor.execute('''
-            SELECT m.id, m.nombre
-            FROM mecanicos m
-            WHERE m.id NOT IN (
-                SELECT mecanico_id FROM asignaciones WHERE detalle_id = ?
-            )
-            ORDER BY m.nombre
-        ''', (vehiculo_id,))
-        
-        mecanicos_disponibles = self.cursor.fetchall()
-        
-        if mecanicos_disponibles:
-            mecanico_var = tk.StringVar()
-            mecanico_var.set(f"{mecanicos_disponibles[0][0]} - {mecanicos_disponibles[0][1]}")
-            
-            mecanicos_dict = {f"{m[0]} - {m[1]}": m[0] for m in mecanicos_disponibles}
-            
-            combo_mecanicos = tk.OptionMenu(add_frame, mecanico_var, *mecanicos_dict.keys())
-            combo_mecanicos.config(font=('Arial', 10), width=20)
-            combo_mecanicos.pack(side='left', padx=5)
-            
-            # Selector de estado del trabajador
-            tk.Label(add_frame, text="Estado:", font=('Arial', 11), bg='white').pack(side='left', padx=(10, 5))
-            
-            self.cursor.execute('SELECT id, nombre_estado FROM estados_trabajador')
-            estados_trabajador = self.cursor.fetchall()
-            
-            estado_var = tk.StringVar()
-            estado_var.set(estados_trabajador[0][1])
-            
-            estados_dict = {e[1]: e[0] for e in estados_trabajador}
-            
-            combo_estados = tk.OptionMenu(add_frame, estado_var, *estados_dict.keys())
-            combo_estados.config(font=('Arial', 10), width=15)
-            combo_estados.pack(side='left', padx=5)
-            
-            # Botón añadir
-            def añadir_mecanico():
-                mecanico_seleccionado = mecanico_var.get()
-                mecanico_id = mecanicos_dict[mecanico_seleccionado]
-                estado_nombre = estado_var.get()
-                estado_id = estados_dict[estado_nombre]
-                
+        def guardar_tarea():
+            descrip = entry_tarea.get().strip()
+            if descrip:
                 try:
                     with self.conexion:
-                        self.cursor.execute('''
-                            INSERT INTO asignaciones (detalle_id, mecanico_id, fecha_asignacion, estado_trabajador_id)
-                            VALUES (?, ?, ?, ?)
-                        ''', (vehiculo_id, mecanico_id, datetime.now().strftime('%Y-%m-%d'), estado_id))
-                    
-                    # Cerrar y reabrir ventana SIN refrescar el tablero
+                        self.cursor.execute('INSERT INTO tareas (descrip, id_dt) VALUES (?, ?)', (descrip, vehiculo_id))
                     ventana.destroy()
-                    self.abrir_gestionar_asignaciones(matricula)
-                    
+                    self.abrir_gestionar_tareas(matricula)
                 except Exception as e:
-                    messagebox.showerror("Error", f"No se pudo añadir: {str(e)}")
-            
-            btn_add = tk.Button(add_frame,
-                            text="➕ Añadir",
-                            font=('Arial', 11, 'bold'),
-                            bg='#4CAF50',
-                            fg='white',
-                            command=añadir_mecanico)
-            btn_add.pack(side='left', padx=10)
-        else:
-            tk.Label(add_frame,
-                    text="Todos los mecánicos ya están asignados",
-                    font=('Arial', 10, 'italic'),
-                    bg='white',
-                    fg='gray').pack(side='left')
+                    messagebox.showerror("Error", str(e))
+        tk.Button(add_frame, text="➕ Agregar Tarea", font=('Arial', 10, 'bold'), bg='#4CAF50', fg='white', command=guardar_tarea).pack(side='left', padx=5)
         
-        # Función para guardar y cerrar
-        def guardar_y_cerrar():
-            # Guardar estado del vehículo
-            nuevo_estado_nombre = estado_vehiculo_var.get()
-            nuevo_estado_id = estados_vehiculo_dict[nuevo_estado_nombre]
+        # Canvas enrollable para Tareas
+        canvas_contenedor = tk.Frame(main_frame, bg='white')
+        canvas_contenedor.pack(fill='both', expand=True, pady=10)
+        canvas = tk.Canvas(canvas_contenedor, bg='white')
+        scrollbar = ttk.Scrollbar(canvas_contenedor, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg='white')
+        scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        self.cursor.execute('SELECT id_tarea, descrip FROM tareas WHERE id_dt = ? ORDER BY id_tarea ASC', (vehiculo_id,))
+        tareas = self.cursor.fetchall()
+        
+        if not tareas:
+            tk.Label(scrollable_frame, text="No hay tareas registradas.", font=('Arial', 11, 'italic'), bg='white', fg='gray').pack(pady=20)
             
+        for tarea in tareas:
+            tarea_id, descrip = tarea
+            tarea_frame = tk.Frame(scrollable_frame, bg='#fff', relief='solid', borderwidth=1)
+            tarea_frame.pack(fill='x', pady=5, padx=5)
+            
+            tarea_header = tk.Frame(tarea_frame, bg='#fff')
+            tarea_header.pack(fill='x', padx=10, pady=5)
+            
+            tk.Label(tarea_header, text=f"🔧 {descrip}", font=('Arial', 12, 'bold'), bg='#fff').pack(side='left')
+            tk.Button(tarea_header, text="🗑️ Eliminar Tarea", font=('Arial', 9), bg='#f44336', fg='white', 
+                      command=lambda t=tarea_id: self.eliminar_tarea(t, ventana, matricula)).pack(side='right')
+            
+            # Asignaciones de esta tarea
+            asig_frame = tk.Frame(tarea_frame, bg='#f9f9f9', relief='flat')
+            asig_frame.pack(fill='x', padx=10, pady=5)
+            
+            self.cursor.execute('''SELECT a.id, m.nombre, et.nombre_estado, et.color 
+                                   FROM asignaciones a JOIN mecanicos m ON a.mecanico_id = m.id
+                                   JOIN estados_trabajador et ON a.estado_trabajador_id = et.id
+                                   WHERE a.tarea_id = ? ORDER BY a.fecha_asignacion DESC''', (tarea_id,))
+            asignaciones = self.cursor.fetchall()
+            
+            if asignaciones:
+                for asig in asignaciones:
+                    aid, mnombre, enombre, ecolor = asig
+                    f = tk.Frame(asig_frame, bg=ecolor, relief='solid', borderwidth=1)
+                    f.pack(fill='x', pady=2)
+                    tk.Label(f, text=f"{mnombre} - {enombre}", font=('Arial', 10, 'bold'), bg=ecolor).pack(side='left', padx=10, pady=2)
+                    tk.Button(f, text="❌ Quitar", bg='#f44336', fg='white', command=lambda a=aid: self.eliminar_asignacion_tarea(a, ventana, matricula)).pack(side='right', padx=5)
+                    tk.Button(f, text="🔄 Estado", bg='#FF9800', fg='white', command=lambda a=aid: self.cambiar_estado_tarea(a, ventana, matricula)).pack(side='right', padx=5)
+            else:
+                tk.Label(asig_frame, text="Sin mecánicos asignados", font=('Arial', 9, 'italic'), bg='#f9f9f9').pack(anchor='w')
+                
+            # Añadir mecanico a tarea
+            add_mec_f = tk.Frame(tarea_frame, bg='#fff')
+            add_mec_f.pack(fill='x', padx=10, pady=5)
+            
+            self.cursor.execute('SELECT id, nombre FROM mecanicos WHERE id NOT IN (SELECT mecanico_id FROM asignaciones WHERE tarea_id = ?)', (tarea_id,))
+            mecs_disp = self.cursor.fetchall()
+            if mecs_disp:
+                mec_var = tk.StringVar(value=mecs_disp[0][1])
+                mecs_dict = {m[1]: m[0] for m in mecs_disp}
+                tk.OptionMenu(add_mec_f, mec_var, *mecs_dict.keys()).pack(side='left')
+                tk.Button(add_mec_f, text="➕ Asignar a Tarea", font=('Arial', 9), bg='#2196F3', fg='white', 
+                          command=lambda t=tarea_id, mv=mec_var, md=mecs_dict: self.asignar_mec_tarea(t, md[mv.get()], ventana, matricula)).pack(side='left', padx=5)
+                
+        # Botones finales
+        tk.Button(ventana, text="❌ CERRAR", font=('Arial', 12, 'bold'), bg='#607D8B', fg='white', command=lambda: [ventana.destroy(), self.refrescar()]).pack(pady=10)
+
+    def asignar_mec_tarea(self, tarea_id, mecanico_id, ventana, matricula):
+        try:
+            with self.conexion:
+                self.cursor.execute("INSERT INTO asignaciones (tarea_id, mecanico_id, fecha_asignacion, estado_trabajador_id) VALUES (?, ?, date('now'), 1)", (tarea_id, mecanico_id))
+            ventana.destroy()
+            self.abrir_gestionar_tareas(matricula)
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+            
+    def eliminar_asignacion_tarea(self, asignacion_id, ventana, matricula):
+        if messagebox.askyesno("Confirmar", "¿Quitar mecánico?"):
             try:
                 with self.conexion:
-                    self.cursor.execute('''
-                        UPDATE detalles
-                        SET estado_camion_id = ?
-                        WHERE id = ?
-                    ''', (nuevo_estado_id, vehiculo_id))
-                
-                # Cerrar ventana y refrescar tablero
+                    self.cursor.execute('DELETE FROM asignaciones WHERE id = ?', (asignacion_id,))
                 ventana.destroy()
+                self.abrir_gestionar_tareas(matricula)
                 self.refrescar()
-                
             except Exception as e:
-                messagebox.showerror("Error", f"No se pudo guardar: {str(e)}")
-        
-        # Frame de botones finales
-        botones_finales = tk.Frame(main_frame, bg='white')
-        botones_finales.pack(pady=20)
-        
-        # Botón guardar y cerrar
-        btn_guardar = tk.Button(botones_finales,
-                            text="💾 GUARDAR Y CERRAR",
-                            font=('Arial', 12, 'bold'),
-                            bg='#4CAF50',
-                            fg='white',
-                            width=20,
-                            command=guardar_y_cerrar)
-        btn_guardar.pack(side='left', padx=5)
-        
-        # Botón cerrar sin guardar
-        btn_cerrar = tk.Button(botones_finales,
-                            text="❌ CANCELAR",
-                            font=('Arial', 12, 'bold'),
-                            bg='#607D8B',
-                            fg='white',
-                            width=20,
-                            command=lambda: [ventana.destroy(), self.refrescar()])
-        btn_cerrar.pack(side='left', padx=5)
-    
-    def cambiar_estado_asignacion(self, asignacion_id, ventana_padre, vehiculo_id, matricula):
-        """Cambia el estado de una asignación"""
-        
-        # Obtener estados disponibles
-        self.cursor.execute('SELECT id, nombre_estado, color FROM estados_trabajador')
-        estados = self.cursor.fetchall()
-        
-        # Crear ventana pequeña
-        ventana = tk.Toplevel(ventana_padre)
-        ventana.title("Cambiar Estado")
-        ventana.geometry("350x300")
-        ventana.resizable(False, False)
-        ventana.grab_set()
-        ventana.transient(ventana_padre)
-        
-        tk.Label(ventana,
-                text="Selecciona el nuevo estado:",
-                font=('Arial', 12, 'bold'),
-                bg='white').pack(pady=20)
-        
-        # Botones para cada estado
-        for estado in estados:
-            estado_id = estado[0]
-            nombre = estado[1]
-            color = estado[2]
-            
-            btn = tk.Button(ventana,
-                           text=nombre,
-                           font=('Arial', 11, 'bold'),
-                           bg=color,
-                           fg='black',
-                           width=25,
-                           height=2,
-                           command=lambda eid=estado_id: self.actualizar_estado_asignacion(asignacion_id, eid, ventana, ventana_padre, vehiculo_id, matricula))
-            btn.pack(pady=5)
-    
-    def actualizar_estado_asignacion(self, asignacion_id, nuevo_estado_id, ventana_cambio, ventana_padre, vehiculo_id, matricula):
-        """Actualiza el estado en la BD"""
-        try:
-            with self.conexion:
-                self.cursor.execute('''
-                    UPDATE asignaciones
-                    SET estado_trabajador_id = ?
-                    WHERE id = ?
-                ''', (nuevo_estado_id, asignacion_id))
-            
-            # Cerrar ventanas y reabrir
-            ventana_cambio.destroy()
-            ventana_padre.destroy()
-            self.abrir_gestionar_asignaciones(matricula)
-            self.refrescar()
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"No se pudo actualizar: {str(e)}")
-    
-    def eliminar_asignacion(self, asignacion_id, ventana_padre, vehiculo_id, matricula):
-        """Elimina una asignación"""
-        
-        respuesta = messagebox.askyesno("Confirmar",
-                                          "¿Quitar este mecánico del vehículo?")
-        
-        if respuesta:
+                messagebox.showerror("Error", str(e))
+                
+    def eliminar_tarea(self, tarea_id, ventana, matricula):
+        if messagebox.askyesno("Confirmar", "¿Eliminar esta tarea y todos sus mecánicos asignados?"):
             try:
                 with self.conexion:
-                    self.cursor.execute('DELETE FROM asignaciones WHERE id = ?', (asignacion_id,))
-                
-                # Cerrar y reabrir ventana
-                ventana_padre.destroy()
-                self.abrir_gestionar_asignaciones(matricula)
+                    self.cursor.execute('DELETE FROM asignaciones WHERE tarea_id = ?', (tarea_id,))
+                    self.cursor.execute('DELETE FROM tareas WHERE id_tarea = ?', (tarea_id,))
+                ventana.destroy()
+                self.abrir_gestionar_tareas(matricula)
                 self.refrescar()
-                
             except Exception as e:
-                messagebox.showerror("Error", f"No se pudo eliminar: {str(e)}")
+                messagebox.showerror("Error", str(e))
                 
-    def cambiar_estado_asignacion_sin_refrescar(self, asignacion_id, ventana_padre, vehiculo_id, matricula):
-        """Cambia el estado de una asignación SIN refrescar el tablero"""
-        
-        # Obtener estados disponibles
+    def cambiar_estado_tarea(self, asignacion_id, ventana_padre, matricula):
         self.cursor.execute('SELECT id, nombre_estado, color FROM estados_trabajador')
         estados = self.cursor.fetchall()
-        
-        # Crear ventana pequeña
         ventana = tk.Toplevel(ventana_padre)
-        ventana.title("Cambiar Estado")
         ventana.geometry("350x300")
-        ventana.resizable(False, False)
-        ventana.grab_set()
-        ventana.transient(ventana_padre)
-        
-        tk.Label(ventana,
-                text="Selecciona el nuevo estado:",
-                font=('Arial', 12, 'bold'),
-                bg='white').pack(pady=20)
-        
-        # Botones para cada estado
-        for estado in estados:
-            estado_id = estado[0]
-            nombre = estado[1]
-            color = estado[2]
-            
-            btn = tk.Button(ventana,
-                        text=nombre,
-                        font=('Arial', 11, 'bold'),
-                        bg=color,
-                        fg='black',
-                        width=25,
-                        height=2,
-                        command=lambda eid=estado_id: self.actualizar_estado_asignacion_sin_refrescar(asignacion_id, eid, ventana, ventana_padre, vehiculo_id, matricula))
-            btn.pack(pady=5)
+        for est in estados:
+            tk.Button(ventana, text=est[1], bg=est[2], font=('Arial', 11, 'bold'), height=2, width=25,
+                      command=lambda eid=est[0]: self.set_estado_asignacion(asignacion_id, eid, ventana, ventana_padre, matricula)).pack(pady=5)
+                      
+    def set_estado_asignacion(self, asig_id, est_id, vtn, vtn_p, matricula):
+        with self.conexion:
+            self.cursor.execute('UPDATE asignaciones SET estado_trabajador_id = ? WHERE id = ?', (est_id, asig_id))
+        vtn.destroy()
+        vtn_p.destroy()
+        self.abrir_gestionar_tareas(matricula)
+        self.refrescar()
 
-    def actualizar_estado_asignacion_sin_refrescar(self, asignacion_id, nuevo_estado_id, ventana_cambio, ventana_padre, vehiculo_id, matricula):
-        """Actualiza el estado en la BD SIN refrescar el tablero"""
+    def abrir_gestionar_asignaciones_autenticado(self, matricula):
+        if not hasattr(self, 'usuario_actual'): return
+        rol = self.usuario_actual['rol']
+        if rol == 'jefe':
+            self.abrir_gestionar_tareas(matricula)
+        elif rol == 'mecanico':
+            self.abrir_mis_tareas_mecanico(matricula)
+
+    def abrir_mis_tareas_mecanico(self, matricula):
+        self.cursor.execute('SELECT d.id FROM detalles d WHERE d.matricula = ?', (matricula,))
+        vehiculo = self.cursor.fetchone()
+        if not vehiculo: return
+        vehiculo_id = vehiculo[0]
+        mecanico_id = self.usuario_actual['id']
+        
+        ventana = tk.Toplevel(self.root)
+        ventana.title(f"Mis Tareas - {matricula}")
+        ventana.geometry("500x600")
+        tk.Label(ventana, text=f"🚛 {matricula} - Mis Tareas", font=('Arial', 16, 'bold')).pack(pady=10)
+        
+        main_frame = tk.Frame(ventana, bg='white', padx=20, pady=20)
+        main_frame.pack(fill='both', expand=True)
+        
+        # Tareas no asignadas al mecanico
+        tk.Label(main_frame, text="Asignarse a una tarea:", font=('Arial', 12, 'bold'), bg='white').pack(anchor='w')
+        self.cursor.execute('''SELECT id_tarea, descrip FROM tareas WHERE id_dt = ? 
+                               AND id_tarea NOT IN (SELECT tarea_id FROM asignaciones WHERE mecanico_id = ?)''', (vehiculo_id, mecanico_id))
+        tareas_disp = self.cursor.fetchall()
+        if tareas_disp:
+            for t in tareas_disp:
+                tk.Button(main_frame, text=f"Asignarme a: {t[1]}", font=('Arial', 10), command=lambda tid=t[0]: self.mecanico_asignarse_tarea(tid, mecanico_id, ventana, matricula)).pack(pady=5)
+        else:
+            tk.Label(main_frame, text="No hay tareas libres", bg='white').pack()
+            
+        # Mis Tareas
+        tk.Label(main_frame, text="Mis Asignaciones:", font=('Arial', 12, 'bold'), bg='white').pack(anchor='w', pady=(20,5))
+        self.cursor.execute('''SELECT a.id, t.descrip, et.nombre_estado, et.color
+                               FROM asignaciones a JOIN tareas t ON a.tarea_id = t.id_tarea
+                               JOIN estados_trabajador et ON a.estado_trabajador_id = et.id
+                               WHERE t.id_dt = ? AND a.mecanico_id = ?''', (vehiculo_id, mecanico_id))
+        mis_asigs = self.cursor.fetchall()
+        if mis_asigs:
+            for asig in mis_asigs:
+                asig_id, desc, enombre, ecolor = asig
+                f = tk.Frame(main_frame, bg=ecolor, relief='solid', borderwidth=1)
+                f.pack(fill='x', pady=5)
+                tk.Label(f, text=f"{desc} - {enombre}", bg=ecolor, font=('Arial', 11, 'bold')).pack(side='left', padx=10, pady=5)
+                tk.Button(f, text="Cambiar Estado", font=('Arial', 9), command=lambda aid=asig_id: self.cambiar_estado_tarea(aid, ventana, matricula)).pack(side='right', padx=10)
+        
+        tk.Button(ventana, text="❌ CERRAR", command=lambda: [ventana.destroy(), self.refrescar()]).pack(pady=10)
+
+    def mecanico_asignarse_tarea(self, tarea_id, mecanico_id, ventana, matricula):
         try:
             with self.conexion:
-                self.cursor.execute('''
-                    UPDATE asignaciones
-                    SET estado_trabajador_id = ?
-                    WHERE id = ?
-                ''', (nuevo_estado_id, asignacion_id))
-            
-            # Cerrar ventanas y reabrir SIN refrescar tablero
-            ventana_cambio.destroy()
-            ventana_padre.destroy()
-            self.abrir_gestionar_asignaciones(matricula)
-            
+                self.cursor.execute("INSERT INTO asignaciones (tarea_id, mecanico_id, fecha_asignacion, estado_trabajador_id) VALUES (?, ?, date('now'), 1)", (tarea_id, mecanico_id))
+            ventana.destroy()
+            self.abrir_mis_tareas_mecanico(matricula)
         except Exception as e:
-            messagebox.showerror("Error", f"No se pudo actualizar: {str(e)}")
+            messagebox.showerror("Error", str(e))
 
-    def eliminar_asignacion_sin_refrescar(self, asignacion_id, ventana_padre, vehiculo_id, matricula):
-        """Elimina una asignación SIN refrescar el tablero"""
-        
-        respuesta = messagebox.askyesno("Confirmar",
-                                        "¿Quitar este mecánico del vehículo?")
-        
-        if respuesta:
-            try:
-                with self.conexion:
-                    self.cursor.execute('DELETE FROM asignaciones WHERE id = ?', (asignacion_id,))
-                
-                # Cerrar y reabrir ventana SIN refrescar tablero
-                ventana_padre.destroy()
-                self.abrir_gestionar_asignaciones(matricula)
-                
-            except Exception as e:
-                messagebox.showerror("Error", f"No se pudo eliminar: {str(e)}")   
-    
     def refrescar(self):
         """Recarga el grid"""
         # Buscar el grid_frame y recargarlo
@@ -1166,29 +1029,8 @@ class TableroVehiculos:
             self.menu_principal.state('zoomed')
             self.menu_principal.deiconify()
 
-    def abrir_gestionar_asignaciones_autenticado(self, matricula):
-        """Abre gestión de asignaciones según el rol del usuario"""
-        
-        if not hasattr(self, 'usuario_actual'):
-            messagebox.showerror("Error", "No hay usuario autenticado")
-            return
-        
-        rol = self.usuario_actual['rol']
-        
-        if rol == 'jefe':
-            # Jefe: acceso total
-            self.abrir_gestionar_asignaciones(matricula)
-        
-        elif rol == 'mecanico':
-            # Mecánico: solo puede gestionar su propia asignación
-            self.abrir_gestionar_asignacion_mecanico(matricula)
-        
-        else:
-            messagebox.showerror("Error", "Rol no reconocido")
-
     def volver_menu_autenticado(self):
         """Vuelve al menú solo si es jefe"""
-        
         if not hasattr(self, 'usuario_actual'):
             return
         
@@ -1200,188 +1042,6 @@ class TableroVehiculos:
             messagebox.showwarning("Acceso denegado", 
                                 "Solo el jefe puede acceder al menú")
 
-    def abrir_gestionar_asignacion_mecanico(self, matricula):
-        """Ventana simplificada para que un mecánico gestione solo su asignación"""
-        
-        # Obtener información del vehículo
-        self.cursor.execute('''
-            SELECT d.id, d.matricula, ec.nombre_estado, ec.color
-            FROM detalles d
-            JOIN estados_camion ec ON d.estado_camion_id = ec.id
-            WHERE d.matricula = ?
-        ''', (matricula,))
-        
-        vehiculo = self.cursor.fetchone()
-        if not vehiculo:
-            return
-        
-        vehiculo_id = vehiculo[0]
-        matricula = vehiculo[1]
-        estado_vehiculo = vehiculo[2]
-        color_vehiculo = vehiculo[3]
-        
-        mecanico_id = self.usuario_actual['id']
-        nombre_mecanico = self.usuario_actual['nombre']
-        
-        # Verificar si el mecánico ya está asignado
-        self.cursor.execute('''
-            SELECT a.id, et.nombre_estado, et.color
-            FROM asignaciones a
-            JOIN estados_trabajador et ON a.estado_trabajador_id = et.id
-            WHERE a.detalle_id = ? AND a.mecanico_id = ?
-        ''', (vehiculo_id, mecanico_id))
-        
-        asignacion = self.cursor.fetchone()
-        
-        # Crear ventana
-        ventana = tk.Toplevel(self.root)
-        ventana.title(f"Mi Asignación - {matricula}")
-        ventana.geometry("500x600")
-        ventana.resizable(False, False)
-        ventana.grab_set()
-        ventana.transient(self.root)
-        
-        # Título
-        tk.Label(ventana,
-                text=f"🚛 {matricula}",
-                font=('Arial', 18, 'bold'),
-                bg=color_vehiculo,
-                fg='black',
-                pady=15).pack(fill='x')
-        
-        # Frame principal
-        main_frame = tk.Frame(ventana, bg='white', padx=30, pady=20)
-        main_frame.pack(fill='both', expand=True)
-        
-        tk.Label(main_frame,
-                text=f"Mecánico: {nombre_mecanico}",
-                font=('Arial', 13, 'bold'),
-                bg='white').pack(pady=10)
-        
-        if asignacion:
-            # Ya está asignado - puede cambiar su estado
-            asignacion_id = asignacion[0]
-            estado_actual = asignacion[1]
-            color_estado = asignacion[2]
-            
-            tk.Label(main_frame,
-                    text=f"Estado actual:",
-                    font=('Arial', 12),
-                    bg='white').pack(pady=10)
-            
-            tk.Label(main_frame,
-                    text=estado_actual,
-                    font=('Arial', 16, 'bold'),
-                    bg=color_estado,
-                    fg='black',
-                    relief='solid',
-                    borderwidth=2,
-                    padx=20,
-                    pady=10).pack(pady=10)
-            
-            tk.Label(main_frame,
-                    text="Selecciona nuevo estado:",
-                    font=('Arial', 11, 'bold'),
-                    bg='white').pack(pady=15)
-            
-            # Obtener estados disponibles
-            self.cursor.execute('SELECT id, nombre_estado, color FROM estados_trabajador')
-            estados = self.cursor.fetchall()
-            
-            # Botones para cambiar estado
-            for estado in estados:
-                estado_id = estado[0]
-                nombre = estado[1]
-                color = estado[2]
-                
-                btn = tk.Button(main_frame,
-                            text=nombre,
-                            font=('Arial', 11, 'bold'),
-                            bg=color,
-                            fg='black',
-                            width=25,
-                            height=2,
-                            command=lambda eid=estado_id: self.cambiar_mi_estado(asignacion_id, eid, ventana))
-                btn.pack(pady=3)
-        
-        else:
-            # No está asignado - puede asignarse
-            tk.Label(main_frame,
-                    text="No estás asignado a este vehículo",
-                    font=('Arial', 12),
-                    bg='white',
-                    fg='#666').pack(pady=20)
-            
-            tk.Label(main_frame,
-                    text="¿Deseas asignarte?",
-                    font=('Arial', 11, 'bold'),
-                    bg='white').pack(pady=10)
-            
-            # Obtener estados disponibles
-            self.cursor.execute('SELECT id, nombre_estado, color FROM estados_trabajador')
-            estados = self.cursor.fetchall()
-            
-            tk.Label(main_frame,
-                    text="Selecciona tu estado inicial:",
-                    font=('Arial', 10),
-                    bg='white').pack(pady=10)
-            
-            # Botones para asignarse con un estado
-            for estado in estados:
-                estado_id = estado[0]
-                nombre = estado[1]
-                color = estado[2]
-                
-                btn = tk.Button(main_frame,
-                            text=f"{nombre}",
-                            font=('Arial', 10, 'bold'),
-                            bg=color,
-                            fg='black',
-                            width=30,
-                            height=2,
-                            command=lambda eid=estado_id: self.asignarme_vehiculo(vehiculo_id, mecanico_id, eid, ventana))
-                btn.pack(pady=3)
-        
-        # Botón cerrar
-        tk.Button(main_frame,
-                text="❌ CERRAR",
-                font=('Arial', 11, 'bold'),
-                bg='#607D8B',
-                fg='white',
-                width=20,
-                command=lambda: [ventana.destroy(), self.refrescar()]).pack(pady=20)
-
-    def cambiar_mi_estado(self, asignacion_id, nuevo_estado_id, ventana):
-        """Cambia el estado de la asignación del mecánico"""
-        try:
-            with self.conexion:
-                self.cursor.execute('''
-                    UPDATE asignaciones
-                    SET estado_trabajador_id = ?
-                    WHERE id = ?
-                ''', (nuevo_estado_id, asignacion_id))
-            
-            ventana.destroy()
-            self.refrescar()
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"No se pudo actualizar: {str(e)}")
-
-    def asignarme_vehiculo(self, vehiculo_id, mecanico_id, estado_id, ventana):
-        """Asigna el mecánico al vehículo"""
-        try:
-            with self.conexion:
-                self.cursor.execute('''
-                    INSERT INTO asignaciones (detalle_id, mecanico_id, fecha_asignacion, estado_trabajador_id)
-                    VALUES (?, ?, ?, ?)
-                ''', (vehiculo_id, mecanico_id, datetime.now().strftime('%Y-%m-%d'), estado_id))
-            
-            ventana.destroy()
-            self.refrescar()
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"No se pudo asignar: {str(e)}")
-        
     def abrir_ventana_vehiculo_autenticado(self):
         """Abre ventana añadir vehículo solo si es jefe"""
         

@@ -38,36 +38,53 @@ def inicializar_base_datos():
                 nombre TEXT NOT NULL,
                 codigo_nfc TEXT UNIQUE,
                 rol_id INTEGER NOT NULL,
+                nombrecompleto TEXT,
                 FOREIGN KEY (rol_id) REFERENCES roles(id)
             );
+            
+            -- TABLA 5: CLIENTES
+            CREATE TABLE IF NOT EXISTS clientes (
+                id_cliente INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre_cliente TEXT,
+                descripcion TEXT
+            );
 
-            -- TABLA 5: DETALLES (movimientos de camiones)
+            -- TABLA 6: DETALLES (movimientos de camiones)
             CREATE TABLE IF NOT EXISTS detalles (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 matricula TEXT NOT NULL,
                 fecha_entrada TEXT NOT NULL,
                 fecha_salida TEXT,
                 estado_camion_id INTEGER NOT NULL,
-                FOREIGN KEY (estado_camion_id) REFERENCES estados_camion(id)
+                terminado BOOLEAN DEFAULT 0,
+                num_factura TEXT,
+                cl_id INTEGER,
+                FOREIGN KEY (estado_camion_id) REFERENCES estados_camion(id),
+                FOREIGN KEY (cl_id) REFERENCES clientes(id_cliente)
             );
 
-            -- TABLA 6: ASIGNACIONES (mecánicos trabajando en camiones)
+            -- TABLA 7: TAREAS
+            CREATE TABLE IF NOT EXISTS tareas (
+                id_tarea INTEGER PRIMARY KEY AUTOINCREMENT,
+                descrip TEXT,
+                id_dt INTEGER,
+                tarea_fin BOOLEAN DEFAULT 0,
+                FOREIGN KEY (id_dt) REFERENCES detalles(id)
+            );
+
+            -- TABLA 8: ASIGNACIONES (mecánicos trabajando en tareas)
             CREATE TABLE IF NOT EXISTS asignaciones (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                detalle_id INTEGER NOT NULL,
+                tarea_id INTEGER NOT NULL,
                 mecanico_id INTEGER NOT NULL,
                 fecha_asignacion TEXT NOT NULL,
                 estado_trabajador_id INTEGER NOT NULL,
-                FOREIGN KEY (detalle_id) REFERENCES detalles(id),
+                f_ini_trabajo TEXT,
+                f_fin_trabajo TEXT,
+                asigna_fin BOOLEAN DEFAULT 0,
+                FOREIGN KEY (tarea_id) REFERENCES tareas(id_tarea),
                 FOREIGN KEY (mecanico_id) REFERENCES mecanicos(id),
                 FOREIGN KEY (estado_trabajador_id) REFERENCES estados_trabajador(id)
-            );
-
-            -- TABLA 7: CLIENTES
-            CREATE TABLE IF NOT EXISTS clientes (
-                id_cliente INTEGER PRIMARY KEY AUTOINCREMENT,
-                nombre_cliente TEXT,
-                descripcion TEXT
             );
         ''')
         print("✅ Tablas creadas correctamente")
@@ -89,29 +106,16 @@ def inicializar_base_datos():
         cursor.executemany('INSERT OR IGNORE INTO estados_trabajador (nombre_estado, color) VALUES (?, ?)', estados_trabajador_iniciales)
 
         mecanicos_iniciales = [
-            ('RMC', '6A22BA6D', 1), ('DMC', '1AC6D56D', 2),
-            ('MMC', 'NFC05', 2), ('FJM', 'NFC12', 2), ('MPM', 'NFC03', 2)
+            ('RMC', '6A22BA6D', 1, 'Ruben Martinez'), ('DMC', '1AC6D56D', 2, 'Diego Miranda'),
+            ('MMC', 'NFC05', 2, 'Manuel Miranda'), ('FJM', 'NFC12', 2, 'Francisco Javier'), ('MPM', 'NFC03', 2, 'Miguel Perez')
         ]
-        cursor.executemany('INSERT OR IGNORE INTO mecanicos (nombre, codigo_nfc, rol_id) VALUES (?, ?, ?)', mecanicos_iniciales)
+        cursor.executemany('INSERT OR IGNORE INTO mecanicos (nombre, codigo_nfc, rol_id, nombrecompleto) VALUES (?, ?, ?, ?)', mecanicos_iniciales)
 
         detalles_iniciales = [
-            ('6651HMV', '2024-11-22', None, 1), ('3080FPP', '2024-11-22', None, 3),
-            ('3718KRT', '2024-11-23', None, 1), ('4717MVP', '2024-11-22', None, 2),
-            ('9515LTM', '2024-11-23', None, 3), ('3442FNS', '2024-11-22', None, 3),
-            ('8507JSD', '2024-11-11', None, 3), ('9374JCF', '2024-11-22', None, 3),
-            ('3168KFG', '2024-11-22', None, 3), ('8128FPC', '2024-11-20', None, 3)
+            ('6651HMV', '2024-11-22', None, 1), ('3080FPP', '2024-11-22', None, 3)
         ]
         cursor.executemany('INSERT OR IGNORE INTO detalles (matricula, fecha_entrada, fecha_salida, estado_camion_id) VALUES (?, ?, ?, ?)', detalles_iniciales)
-
-        asignaciones_iniciales = [
-            (2, 1, '2024-11-22', 2), (2, 2, '2024-11-22', 3),
-            (2, 3, '2024-11-22', 3), (2, 4, '2024-11-22', 3),
-            (2, 5, '2024-11-22', 3), (2, 3, '2024-11-22', 3),
-            (2, 4, '2024-11-22', 3), (4, 4, '2024-11-22', 2),
-            (5, 5, '2024-11-23', 4)
-        ]
-        cursor.executemany('INSERT OR IGNORE INTO asignaciones (detalle_id, mecanico_id, fecha_asignacion, estado_trabajador_id) VALUES (?, ?, ?, ?)', asignaciones_iniciales)
-        print("✅ Datos iniciales insertados")
+        print("✅ Datos iniciales de tablas insertados")
 
         conexion.commit()
         print("✅ Base de datos guardada y cerrada")

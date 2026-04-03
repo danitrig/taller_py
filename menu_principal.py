@@ -45,11 +45,6 @@ class MenuPrincipal:
                 "comando": self.abrir_tablero
             },
             {
-                "texto": "🚛 GESTIÓN DE VEHÍCULOS",
-                "color": "#2196F3",
-                "comando": self.abrir_gestion_vehiculos
-            },
-            {
                 "texto": "👨‍🔧 GESTIÓN DE MECÁNICOS",
                 "color": "#FF9800",
                 "comando": self.abrir_gestion_mecanicos
@@ -58,11 +53,6 @@ class MenuPrincipal:
                 "texto": "⚙️ GESTIÓN DE ESTADOS",
                 "color": "#9C27B0",
                 "comando": self.abrir_gestion_estados
-            },
-            {
-                "texto": "👥 GESTIÓN DE CLIENTES",
-                "color": "#3F51B5",
-                "comando": self.abrir_gestion_clientes
             },
             {
                 "texto": "❌ SALIR",
@@ -109,15 +99,6 @@ class MenuPrincipal:
         from tablero_vehiculos import TableroVehiculos
         TableroVehiculos(ventana_tablero, self.root)
     
-    def abrir_gestion_vehiculos(self):
-        """Abre gestión de vehículos"""
-        self.root.withdraw()
-        
-        ventana_gestion = tk.Toplevel()
-        ventana_gestion.state('zoomed')
-        from gestion_vehiculos import GestionVehiculos
-        GestionVehiculos(ventana_gestion, self.root)
-    
     def abrir_gestion_mecanicos(self):
         """Abre gestión de mecánicos"""
         self.root.withdraw()
@@ -135,15 +116,6 @@ class MenuPrincipal:
         ventana_gestion.state('zoomed')
         from gestion_estados import GestionEstados
         GestionEstados(ventana_gestion, self.root)
-        
-    def abrir_gestion_clientes(self):
-        """Abre gestión de clientes"""
-        self.root.withdraw()
-        
-        ventana_gestion = tk.Toplevel()
-        ventana_gestion.state('zoomed')
-        from gestion_clientes import GestionClientes
-        GestionClientes(ventana_gestion, self.root)
     
     def salir(self):
         """Cierra la aplicación"""
